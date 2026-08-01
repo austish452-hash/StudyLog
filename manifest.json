@@ -4,8 +4,6 @@
   "description": "学習記録とGoogle Drive同期アプリ",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#1A6ED2",
   "icons": [
     {
       "src": "icon.png",
