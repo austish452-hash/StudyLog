@@ -1,0 +1,1507 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学習記録アプリ - StudyLog (Google Drive Sync)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Identity Services & Drive API Client -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col antialiased transition-colors duration-200">
+    <div id="app" class="flex-1 flex flex-col">
+
+        <!-- Navigation Header -->
+        <header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <!-- App Logo & Title -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+                        <i data-lucide="book-open" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg leading-none text-slate-900 dark:text-white">StudyLog</h1>
+                        <p class="text-[11px] text-slate-400 mt-0.5">毎日の学習可視化・習慣化アプリ</p>
+                    </div>
+                </div>
+
+                <!-- Google Sync Controls & Quick Actions -->
+                <div class="flex items-center gap-2">
+                    <!-- Google Drive Sync Status / Login Button -->
+                    <div class="flex items-center border-r border-slate-200 dark:border-slate-700 pr-2 mr-1">
+                        <button v-if="!isSignedIn" @click="handleAuthClick" class="px-3 py-1.5 bg-white dark:bg-slate-700 hover:bg-slate-50 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-sm">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24">
+                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                            </svg>
+                            <span>Googleログイン (同期)</span>
+                        </button>
+
+                        <div v-else class="flex items-center gap-2">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Drive同期中
+                            </span>
+                            <button @click="syncWithDrive" title="手動同期" :disabled="isSyncing" class="p-1.5 text-slate-500 hover:text-brand-600 rounded-lg transition-colors">
+                                <i data-lucide="refresh-cw" class="w-4 h-4" :class="{'animate-spin': isSyncing}"></i>
+                            </button>
+                            <button @click="handleSignoutClick" title="ログアウト" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline px-1">
+                                ログアウト
+                            </button>
+                        </div>
+                    </div>
+
+                    <button @click="showTimerModal = true" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium rounded-xl text-xs sm:text-sm transition-all flex items-center gap-1.5">
+                        <i data-lucide="timer" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
+                        <span class="hidden sm:inline">学習タイマー</span>
+                    </button>
+                    <button @click="openAddModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl text-xs sm:text-sm shadow-md shadow-brand-500/20 transition-all flex items-center gap-1.5">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span>記録をつける</span>
+                    </button>
+
+                    <!-- Menu Dropdown Toggle -->
+                    <div class="relative">
+                        <button @click="toggleMenu = !toggleMenu" class="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                            <i data-lucide="more-vertical" class="w-5 h-5"></i>
+                        </button>
+                        
+                        <!-- Dropdown Menu -->
+                        <div v-if="toggleMenu" @click="toggleMenu = false" class="fixed inset-0 z-40"></div>
+                        <div v-if="toggleMenu" class="absolute right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 py-1 z-50 text-xs">
+                            <button @click="showConfigModal = true; toggleMenu = false;" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                                <i data-lucide="settings" class="w-4 h-4 text-slate-500"></i>
+                                Google API設定
+                            </button>
+                            <hr class="my-1 border-slate-100 dark:border-slate-700">
+                            <button @click="exportCSV(); toggleMenu = false;" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                                <i data-lucide="file-spread-sheet" class="w-4 h-4 text-emerald-600"></i>
+                                CSV出力
+                            </button>
+                            <button @click="exportData(); toggleMenu = false;" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                                <i data-lucide="download" class="w-4 h-4 text-brand-600"></i>
+                                バックアップ保存
+                            </button>
+                            <label class="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-700 dark:text-slate-200 cursor-pointer">
+                                <i data-lucide="upload" class="w-4 h-4 text-indigo-500"></i>
+                                データを復元
+                                <input type="file" @change="importData($event); toggleMenu = false;" accept=".json" class="hidden">
+                            </label>
+                            <hr class="my-1 border-slate-100 dark:border-slate-700">
+                            <button @click="openConfirmClearModal(); toggleMenu = false;" class="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-950/50 flex items-center gap-2 text-red-600 dark:text-red-400 font-medium">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                全データを消去
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Container -->
+        <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+            <!-- KPI Summary Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <!-- Today Total -->
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
+                        <span>本日の学習</span>
+                        <div class="p-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+                            <i data-lucide="clock" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <div class="text-2xl font-bold text-slate-800 dark:text-white">
+                            {{ formatMinutesToHours(todayMinutes) }}
+                        </div>
+                        <div class="text-xs text-slate-400 mt-0.5">目標 {{ targetDailyHours }}時間 中 {{ Math.min(Math.round((todayMinutes / (targetDailyHours * 60 || 1)) * 100), 100) }}%</div>
+                    </div>
+                    <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full mt-3 overflow-hidden">
+                        <div class="bg-brand-600 h-full rounded-full transition-all duration-300" :style="{ width: Math.min((todayMinutes / (targetDailyHours * 60 || 1)) * 100, 100) + '%' }"></div>
+                    </div>
+                </div>
+
+                <!-- Streak Days -->
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
+                        <span>連続学習日数</span>
+                        <div class="p-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg">
+                            <i data-lucide="flame" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <div class="text-2xl font-bold text-slate-800 dark:text-white">
+                            {{ streakDays }} <span class="text-sm font-normal text-slate-500">日</span>
+                        </div>
+                        <div class="text-xs text-slate-400 mt-0.5">継続は力なり！</div>
+                    </div>
+                    <div class="text-xs text-amber-600 dark:text-amber-400 font-medium mt-3 flex items-center gap-1">
+                        <i data-lucide="award" class="w-3.5 h-3.5"></i>
+                        <span>最高記録: {{ maxStreakDays }} 日</span>
+                    </div>
+                </div>
+
+                <!-- This Week Total -->
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
+                        <span>今週の学習時間</span>
+                        <div class="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                            <i data-lucide="calendar" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <div class="text-2xl font-bold text-slate-800 dark:text-white">
+                            {{ formatMinutesToHours(thisWeekMinutes) }}
+                        </div>
+                        <div class="text-xs text-slate-400 mt-0.5">直近7日間</div>
+                    </div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 mt-3 flex items-center justify-between">
+                        <span>1日平均:</span>
+                        <span class="font-semibold text-slate-700 dark:text-slate-200">{{ formatMinutesToHours(Math.round(thisWeekMinutes / 7)) }}</span>
+                    </div>
+                </div>
+
+                <!-- Total Cumulative -->
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
+                        <span>通算学習時間</span>
+                        <div class="p-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
+                            <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <div class="text-2xl font-bold text-slate-800 dark:text-white">
+                            {{ formatMinutesToHours(totalMinutes) }}
+                        </div>
+                        <div class="text-xs text-slate-400 mt-0.5">累計 {{ logs.length }} 回の記録</div>
+                    </div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 mt-3 flex items-center justify-between">
+                        <span>登録教材数:</span>
+                        <span class="font-semibold text-slate-700 dark:text-slate-200">{{ uniqueSubjects.length }} 個</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Goal & Progress Tracker Card -->
+            <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                    <div>
+                        <h2 class="font-semibold text-slate-800 dark:text-white text-base flex items-center gap-2">
+                            <i data-lucide="target" class="w-5 h-5 text-brand-600"></i>
+                            目標達成進捗ダッシュボード
+                        </h2>
+                        <p class="text-xs text-slate-400">設定した目標時間に対する今日の達成度と今週の進捗</p>
+                    </div>
+
+                    <!-- Target Setting Inline Input -->
+                    <div class="flex items-center gap-2 bg-slate-50 dark:bg-slate-700/50 p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                        <span class="text-slate-600 dark:text-slate-300 font-medium">1日の目標時間:</span>
+                        <input type="number" min="0.5" max="24" step="0.5" v-model.number="targetDailyHours" @change="saveTargetHours" class="w-16 px-2 py-1 text-right border border-slate-300 dark:border-slate-600 rounded-lg dark:bg-slate-700 font-bold text-slate-800 dark:text-white">
+                        <span class="text-slate-500">時間</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Today Goal Status -->
+                    <div class="p-4 bg-slate-50/70 dark:bg-slate-700/30 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                                <i data-lucide="sun" class="w-4 h-4 text-amber-500"></i>
+                                本日の目標達成率
+                            </span>
+                            <span class="text-sm font-bold" :class="todayGoalPercent >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-brand-600 dark:text-brand-400'">
+                                {{ todayGoalPercent }}%
+                            </span>
+                        </div>
+                        
+                        <!-- Progress Bar -->
+                        <div class="w-full bg-slate-200 dark:bg-slate-600 h-3 rounded-full overflow-hidden mb-2">
+                            <div class="h-full rounded-full transition-all duration-500" :class="todayGoalPercent >= 100 ? 'bg-emerald-500' : 'bg-brand-600'" :style="{ width: Math.min(todayGoalPercent, 100) + '%' }"></div>
+                        </div>
+
+                        <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                            <span>現在: <strong>{{ formatMinutesToHours(todayMinutes) }}</strong></span>
+                            <span v-if="todayGoalPercent < 100">目標まであと <strong>{{ formatMinutesToHours(todayRemainingMinutes) }}</strong></span>
+                            <span v-else class="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                                <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> 目標達成！おめでとうございます
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Weekly Goal Status -->
+                    <div class="p-4 bg-slate-50/70 dark:bg-slate-700/30 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                                <i data-lucide="calendar" class="w-4 h-4 text-indigo-500"></i>
+                                今週 (7日間) の目標達成率
+                            </span>
+                            <span class="text-sm font-bold" :class="weeklyGoalPercent >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'">
+                                {{ weeklyGoalPercent }}%
+                            </span>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div class="w-full bg-slate-200 dark:bg-slate-600 h-3 rounded-full overflow-hidden mb-2">
+                            <div class="h-full rounded-full bg-indigo-600 transition-all duration-500" :style="{ width: Math.min(weeklyGoalPercent, 100) + '%' }"></div>
+                        </div>
+
+                        <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                            <span>今週の学習時間: <strong>{{ formatMinutesToHours(thisWeekMinutes) }}</strong></span>
+                            <span>週目標: <strong>{{ targetDailyHours * 7 }}時間</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Daily Trend Bar Chart -->
+                <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="font-semibold text-slate-800 dark:text-white text-base flex items-center gap-2">
+                                <i data-lucide="trending-up" class="w-4 h-4 text-brand-600"></i>
+                                最近14日間の学習推移
+                            </h2>
+                            <p class="text-xs text-slate-400">日別の学習時間（分）</p>
+                        </div>
+                    </div>
+                    <div class="h-64 relative">
+                        <canvas id="dailyChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Custom Date Range Aggregator -->
+                <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h2 class="font-semibold text-slate-800 dark:text-white text-sm flex items-center gap-2">
+                                <i data-lucide="calendar-range" class="w-4 h-4 text-brand-600"></i>
+                                指定日以降の学習時間
+                            </h2>
+                            <span class="text-[10px] bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300 font-medium px-2 py-0.5 rounded-full">自由集計</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mb-3">スタート日を選択して集計</p>
+                        
+                        <!-- Date Picker -->
+                        <div class="mb-4">
+                            <label class="block text-[11px] text-slate-500 dark:text-slate-400 mb-1 font-medium">集計開始日</label>
+                            <input type="date" v-model="sinceDate" class="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-slate-800 dark:text-slate-100">
+                        </div>
+
+                        <!-- Stats Box -->
+                        <div class="p-3 bg-slate-50/80 dark:bg-slate-700/40 rounded-xl space-y-2 border border-slate-100 dark:border-slate-700">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-slate-500 dark:text-slate-400">期間内の累計時間:</span>
+                                <span class="font-bold text-slate-800 dark:text-white text-sm">{{ formatMinutesToHours(sinceDateMinutes) }}</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-slate-500 dark:text-slate-400">経過日数:</span>
+                                <span class="font-semibold text-slate-700 dark:text-slate-300">{{ sinceDateDaysCount }} 日間</span>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-slate-500 dark:text-slate-400">1日あたりの平均:</span>
+                                <span class="font-semibold text-brand-600 dark:text-brand-400">{{ formatMinutesToHours(sinceDateDailyAverage) }} / 日</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 text-[11px] text-slate-400 flex items-center gap-1">
+                        <i data-lucide="info" class="w-3.5 h-3.5 shrink-0"></i>
+                        <span>{{ sinceDate }} 以降のデータを自動集計中</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Left Column: Quick Presets -->
+                <div class="space-y-6">
+                    <div class="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold text-slate-800 dark:text-white text-sm flex items-center gap-2">
+                                <i data-lucide="bookmark" class="w-4 h-4 text-brand-600"></i>
+                                よく使う教材（プリセット）
+                            </h3>
+                            <button @click="showPresetModal = true" class="text-xs text-brand-600 hover:underline">編集</button>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button 
+                                v-for="preset in presets" 
+                                :key="preset.id"
+                                @click="quickAddLog(preset)"
+                                class="px-3 py-2 bg-slate-50 dark:bg-slate-700/50 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:border-brand-300 dark:hover:border-brand-700 border border-slate-200 dark:border-slate-700 rounded-xl text-left text-xs transition-all flex items-center gap-2 group"
+                            >
+                                <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ backgroundColor: preset.color }"></span>
+                                <span class="font-medium text-slate-700 dark:text-slate-200 group-hover:text-brand-600 dark:group-hover:text-brand-300">{{ preset.name }}</span>
+                                <i data-lucide="plus" class="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                            </button>
+                            <button @click="showPresetModal = true" class="px-3 py-2 border border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors flex items-center gap-1">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i> 教材を追加
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: History Log Table -->
+                <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-sm">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h2 class="font-semibold text-slate-800 dark:text-white text-base flex items-center gap-2">
+                                <i data-lucide="list" class="w-4 h-4 text-brand-600"></i>
+                                学習記録一覧
+                            </h2>
+                            <p class="text-xs text-slate-400">直近の記録 {{ filteredLogs.length }} 件</p>
+                        </div>
+
+                        <!-- Filter Controls -->
+                        <div class="flex items-center gap-2">
+                            <select v-model="filterSubject" class="px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                <option value="">すべての教材</option>
+                                <option v-for="subj in uniqueSubjects" :key="subj" :value="subj">{{ subj }}</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Log List -->
+                    <div v-if="filteredLogs.length > 0" class="space-y-3 max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
+                        <div 
+                            v-for="log in filteredLogs" 
+                            :key="log.id"
+                            class="p-3.5 bg-slate-50/70 dark:bg-slate-700/40 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-600/60 rounded-xl transition-all flex items-start justify-between gap-3 group"
+                        >
+                            <div class="flex items-start gap-3">
+                                <div class="p-2.5 rounded-xl text-white font-bold text-xs flex flex-col items-center justify-center min-w-[50px] shadow-sm shrink-0" :style="{ backgroundColor: getSubjectColor(log.subject) }">
+                                    <span class="text-[10px] opacity-80 uppercase">{{ formatDateShort(log.date).month }}</span>
+                                    <span class="text-base leading-none">{{ formatDateShort(log.date).day }}</span>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <h4 class="font-semibold text-slate-800 dark:text-white text-sm">{{ log.subject }}</h4>
+                                        <span class="px-2 py-0.5 text-[10px] font-medium rounded-md bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                            {{ log.category || '学習' }}
+                                        </span>
+                                    </div>
+                                    <p v-if="log.memo" class="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                                        {{ log.memo }}
+                                    </p>
+                                    <div class="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
+                                        <span>{{ log.date }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-3 shrink-0">
+                                <div class="text-right">
+                                    <span class="text-base font-bold text-brand-600 dark:text-brand-400">{{ formatMinutesToHours(log.minutes) }}</span>
+                                    <div class="text-[10px] text-slate-400">({{ log.minutes }}分)</div>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <button @click="openEditModal(log)" title="編集" class="p-1.5 text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition-colors">
+                                        <i data-lucide="edit-3" class="w-4 h-4"></i>
+                                    </button>
+                                    <button @click="openConfirmDeleteModal(log.id)" title="削除" class="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div v-else class="text-center py-12 text-slate-400">
+                        <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
+                        <p class="text-sm">記録が見つかりません</p>
+                        <button @click="openAddModal()" class="mt-3 px-4 py-2 text-xs font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors">
+                            新しい記録を追加する
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+
+        <!-- Google API Configuration Modal -->
+        <div v-if="showConfigModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <i data-lucide="settings" class="w-5 h-5 text-brand-600"></i>
+                        Google Cloud API 設定
+                    </h3>
+                    <button @click="showConfigModal = false" class="text-slate-400 hover:text-slate-600">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                    Google Cloud Consoleで作成した「クライアントID」を入力することで、自身のGoogle Drive（appDataFolder）との自動同期が可能になります。
+                </p>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Google OAuth クライアントID</label>
+                        <input type="text" v-model="googleClientId" placeholder="xxxx.apps.googleusercontent.com" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs outline-none text-slate-800 dark:text-white">
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button @click="saveApiConfig" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl text-xs transition-all">
+                            設定を保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add / Edit Log Modal -->
+        <div v-if="showLogModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <i data-lucide="pen-tool" class="w-5 h-5 text-brand-600"></i>
+                        {{ isEditing ? '学習記録の編集' : '学習記録の追加' }}
+                    </h3>
+                    <button @click="showLogModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="saveLog" class="space-y-4">
+                    <!-- Date -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">日付</label>
+                        <input type="date" v-model="formLog.date" required class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none text-slate-800 dark:text-white">
+                    </div>
+
+                    <!-- Subject -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">教材名 / 科目</label>
+                        <div class="relative">
+                            <input type="text" v-model="formLog.subject" list="subject-list" required placeholder="例: 英単語帳、Pythonプログラミング" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none text-slate-800 dark:text-white">
+                            <datalist id="subject-list">
+                                <option v-for="preset in presets" :key="preset.id" :value="preset.name"></option>
+                                <option v-for="subj in uniqueSubjects" :key="subj" :value="subj"></option>
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <!-- Category -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">カテゴリ</label>
+                        <select v-model="formLog.category" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none text-slate-800 dark:text-white">
+                            <option value="語学">語学</option>
+                            <option value="資格・検定">資格・検定</option>
+                            <option value="プログラミング">プログラミング</option>
+                            <option value="読書・教養">読書・教養</option>
+                            <option value="学校・受験">学校・受験</option>
+                            <option value="その他">その他</option>
+                        </select>
+                    </div>
+
+                    <!-- Time Input -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">学習時間</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="flex items-center gap-2">
+                                <input type="number" min="0" max="23" v-model.number="formHours" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-sm text-right outline-none text-slate-800 dark:text-white">
+                                <span class="text-xs text-slate-500">時間</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="number" min="0" max="59" v-model.number="formMinutes" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-sm text-right outline-none text-slate-800 dark:text-white">
+                                <span class="text-xs text-slate-500">分</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Memo -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">振り返り・メモ (任意)</label>
+                        <textarea v-model="formLog.memo" rows="3" placeholder="P.45〜P.60まで完了。" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none resize-none text-slate-800 dark:text-white"></textarea>
+                    </div>
+
+                    <!-- Submit Buttons -->
+                    <div class="flex items-center justify-end gap-3 pt-3">
+                        <button type="button" @click="showLogModal = false" class="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">
+                            キャンセル
+                        </button>
+                        <button type="submit" class="px-5 py-2 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-md shadow-brand-500/20 transition-all">
+                            保存する
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Timer Modal -->
+        <div v-if="showTimerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 text-center">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-sm font-bold text-slate-500 dark:text-slate-400">リアルタイム学習計測</h3>
+                    <button @click="showTimerModal = false" class="text-slate-400 hover:text-slate-600">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <div class="my-6">
+                    <div class="text-5xl font-mono font-bold tracking-tight text-slate-800 dark:text-white">
+                        {{ formattedTimerTime }}
+                    </div>
+                    <p class="text-xs text-slate-400 mt-2">集中して取り組みましょう！</p>
+                </div>
+
+                <div class="mb-6 text-left">
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">記録先教材</label>
+                    <select v-model="timerSubject" class="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white rounded-xl text-sm outline-none">
+                        <option v-for="preset in presets" :key="preset.id" :value="preset.name">{{ preset.name }}</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center justify-center gap-3 mb-3">
+                    <button @click="toggleTimer" :class="timerActive ? 'bg-amber-500 hover:bg-amber-600' : 'bg-brand-600 hover:bg-brand-700'" class="flex-1 py-3 text-white font-semibold rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 text-sm">
+                        <i :data-lucide="timerActive ? 'pause' : 'play'" class="w-4 h-4"></i>
+                        {{ timerActive ? '一時停止' : 'スタート' }}
+                    </button>
+                    <button @click="resetTimer" class="p-3 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <button @click="saveTimerLog" :disabled="timerSeconds < 60" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white font-medium rounded-xl text-xs transition-colors">
+                    計測終了して記録を保存 (1分以上)
+                </button>
+            </div>
+        </div>
+
+        <!-- Presets Modal -->
+        <div v-if="showPresetModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <i data-lucide="bookmark" class="w-5 h-5 text-brand-600"></i>
+                        教材プリセットの管理
+                    </h3>
+                    <button @click="showPresetModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- Existing Presets List -->
+                <div class="space-y-2 mb-4 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                    <div v-for="preset in presets" :key="preset.id" class="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-700/50 rounded-xl text-xs">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full" :style="{ backgroundColor: preset.color }"></span>
+                            <span class="font-medium text-slate-800 dark:text-slate-200">{{ preset.name }}</span>
+                        </div>
+                        <button @click="deletePreset(preset.id)" class="text-slate-400 hover:text-red-500">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Add New Preset Form -->
+                <form @submit.prevent="addPreset" class="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                    <input type="color" v-model="newPresetColor" class="w-8 h-8 rounded-lg border-0 cursor-pointer p-0 bg-transparent">
+                    <input type="text" v-model="newPresetName" placeholder="新しい教材名" required class="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs outline-none text-slate-800 dark:text-white">
+                    <button type="submit" class="px-3 py-2 bg-brand-600 text-white rounded-xl text-xs font-medium hover:bg-brand-700 shrink-0">
+                        追加
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Custom Toast Notification -->
+        <div v-if="toastMessage" class="fixed bottom-5 right-5 z-50 bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 px-4 py-2.5 rounded-xl shadow-xl text-xs flex items-center gap-2 animate-bounce">
+            <i data-lucide="info" class="w-4 h-4"></i>
+            <span>{{ toastMessage }}</span>
+        </div>
+
+        <!-- Delete Confirmation Modal -->
+        <div v-if="showDeleteModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-xs w-full p-5 shadow-2xl border border-slate-200 dark:border-slate-700 text-center">
+                <div class="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-sm font-bold text-slate-800 dark:text-white mb-1">この記録を削除しますか？</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">この操作は取り消せません。</p>
+                <div class="flex items-center gap-2">
+                    <button @click="showDeleteModal = false" class="flex-1 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">
+                        キャンセル
+                    </button>
+                    <button @click="confirmDeleteLog" class="flex-1 py-2 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition-colors">
+                        削除する
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- All Data Clear Modal -->
+        <div v-if="showClearModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-xs w-full p-5 shadow-2xl border border-slate-200 dark:border-slate-700 text-center">
+                <div class="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i data-lucide="trash-2" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-sm font-bold text-slate-800 dark:text-white mb-1">すべてのデータを削除しますか？</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">すべての学習記録とプリセットがクリアされます。</p>
+                <div class="flex items-center gap-2">
+                    <button @click="showClearModal = false" class="flex-1 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">
+                        キャンセル
+                    </button>
+                    <button @click="confirmClearAll" class="flex-1 py-2 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-md transition-colors">
+                        全消去する
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-auto py-6 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
+            <p>StudyLog &copy; 毎日の学びを可視化して成長を加速させよう (Google Drive Sync Enabled)</p>
+        </footer>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                // State variables
+                const logs = ref([]);
+                const presets = ref([
+                    { id: '1', name: '英単語・英語長文', color: '#6366f1' },
+                    { id: '2', name: '基本情報技術者試験', color: '#10b981' },
+                    { id: '3', name: '読書・ビジネス書', color: '#f59e0b' },
+                    { id: '4', name: '数学・問題集', color: '#ec4899' }
+                ]);
+                const targetDailyHours = ref(2);
+
+                // Google Drive Sync State
+                const googleClientId = ref(localStorage.getItem('studylog_google_client_id') || '');
+                const isSignedIn = ref(false);
+                const isSyncing = ref(false);
+                const accessToken = ref(null);
+                const driveFileId = ref(null);
+                const tokenClient = ref(null);
+
+                // Specific date start
+                const getFirstDayOfMonth = () => {
+                    const now = new Date();
+                    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                };
+                const sinceDate = ref(getFirstDayOfMonth());
+
+                // UI Controls
+                const toggleMenu = ref(false);
+                const showLogModal = ref(false);
+                const showTimerModal = ref(false);
+                const showPresetModal = ref(false);
+                const showDeleteModal = ref(false);
+                const showClearModal = ref(false);
+                const showConfigModal = ref(false);
+                const targetDeleteId = ref(null);
+                const toastMessage = ref('');
+                const isEditing = ref(false);
+                const filterSubject = ref('');
+
+                // Form Data
+                const formLog = ref({
+                    id: null,
+                    date: new Date().toISOString().split('T')[0],
+                    subject: '',
+                    category: '語学',
+                    minutes: 30,
+                    memo: ''
+                });
+                const formHours = ref(0);
+                const formMinutes = ref(30);
+
+                // Timer State
+                const timerActive = ref(false);
+                const timerSeconds = ref(0);
+                const timerInterval = ref(null);
+                const timerSubject = ref('');
+
+                // Preset Management Form
+                const newPresetName = ref('');
+                const newPresetColor = ref('#3b82f6');
+
+                // Chart Instance
+                let dailyChartInstance = null;
+
+                // Storage Keys
+                const STORAGE_KEY_LOGS = 'studylog_records_v1';
+                const STORAGE_KEY_PRESETS = 'studylog_presets_v1';
+                const STORAGE_KEY_TARGET = 'studylog_target_v1';
+                const STORAGE_KEY_INIT = 'studylog_initialized_v1';
+                const SYNC_FILE_NAME = 'studylog_appdata.json';
+
+                function showToast(msg) {
+                    toastMessage.value = msg;
+                    setTimeout(() => {
+                        toastMessage.value = '';
+                    }, 3000);
+                }
+
+                onMounted(() => {
+                    const isInitialized = localStorage.getItem(STORAGE_KEY_INIT);
+                    const savedLogs = localStorage.getItem(STORAGE_KEY_LOGS);
+
+                    if (savedLogs !== null) {
+                        try { logs.value = JSON.parse(savedLogs); } catch(e){ logs.value = []; }
+                    } else if (!isInitialized) {
+                        logs.value = [
+                            { id: '1', date: getRelativeDate(0), subject: '英単語・英語長文', category: '語学', minutes: 45, memo: 'Part 3 の復習' },
+                            { id: '2', date: getRelativeDate(-1), subject: '基本情報技術者試験', category: '資格・検定', minutes: 90, memo: '過去問演習 令和5年秋' },
+                            { id: '3', date: getRelativeDate(-2), subject: '読書・ビジネス書', category: '読書・教養', minutes: 30, memo: '3章まで読了' }
+                        ];
+                        localStorage.setItem(STORAGE_KEY_INIT, 'true');
+                        localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs.value));
+                    }
+
+                    const savedPresets = localStorage.getItem(STORAGE_KEY_PRESETS);
+                    if (savedPresets) {
+                        try { presets.value = JSON.parse(savedPresets); } catch(e){}
+                    }
+
+                    const savedTarget = localStorage.getItem(STORAGE_KEY_TARGET);
+                    if (savedTarget) {
+                        targetDailyHours.value = parseFloat(savedTarget) || 2;
+                    }
+
+                    if (presets.value.length > 0) {
+                        timerSubject.value = presets.value[0].name;
+                    }
+
+                    initGoogleDrive();
+
+                    nextTick(() => {
+                        lucide.createIcons();
+                        initCharts();
+                    });
+                });
+
+                // Google Identity & Drive API Handler
+                function initGoogleDrive() {
+                    if (!googleClientId.value) return;
+
+                    window.onloadGsi = () => {
+                        if (window.google) {
+                            tokenClient.value = google.accounts.oauth2.initTokenClient({
+                                client_id: googleClientId.value,
+                                scope: 'https://www.googleapis.com/auth/drive.appdata',
+                                callback: async (response) => {
+                                    if (response.error !== undefined) {
+                                        throw (response);
+                                    }
+                                    accessToken.value = response.access_token;
+                                    isSignedIn.value = true;
+                                    showToast('Google認証が完了しました');
+                                    await syncWithDrive();
+                                },
+                            });
+                        }
+                    };
+
+                    if (window.google && window.google.accounts) {
+                        window.onloadGsi();
+                    } else {
+                        window.addEventListener('load', window.onloadGsi);
+                    }
+                }
+
+                function handleAuthClick() {
+                    if (!googleClientId.value) {
+                        showConfigModal.value = true;
+                        showToast('Client IDを入力してください');
+                        return;
+                    }
+                    if (tokenClient.value) {
+                        tokenClient.value.requestAccessToken({ prompt: 'consent' });
+                    } else {
+                        initGoogleDrive();
+                        setTimeout(() => {
+                            if (tokenClient.value) tokenClient.value.requestAccessToken({ prompt: 'consent' });
+                        }, 500);
+                    }
+                }
+
+                function handleSignoutClick() {
+                    if (accessToken.value) {
+                        google.accounts.oauth2.revoke(accessToken.value, () => {
+                            accessToken.value = null;
+                            isSignedIn.value = false;
+                            showToast('ログアウトしました');
+                        });
+                    }
+                }
+
+                function saveApiConfig() {
+                    localStorage.setItem('studylog_google_client_id', googleClientId.value.trim());
+                    showConfigModal.value = false;
+                    initGoogleDrive();
+                    showToast('API設定を保存しました');
+                }
+
+                async function syncWithDrive() {
+                    if (!accessToken.value || isSyncing.value) return;
+                    isSyncing.value = true;
+
+                    try {
+                        const searchRes = await fetch(
+                            `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='${SYNC_FILE_NAME}'`,
+                            { headers: { Authorization: `Bearer ${accessToken.value}` } }
+                        );
+                        const searchData = await searchRes.json();
+
+                        if (searchData.files && searchData.files.length > 0) {
+                            driveFileId.value = searchData.files[0].id;
+
+                            const fileRes = await fetch(
+                                `https://www.googleapis.com/drive/v3/files/${driveFileId.value}?alt=media`,
+                                { headers: { Authorization: `Bearer ${accessToken.value}` } }
+                            );
+                            const remoteData = await fileRes.json();
+
+                            if (remoteData && remoteData.logs) {
+                                logs.value = remoteData.logs;
+                                presets.value = remoteData.presets || presets.value;
+                                targetDailyHours.value = remoteData.targetDailyHours || targetDailyHours.value;
+                                saveData(false);
+                                showToast('Driveから最新データを取得しました');
+                            }
+                        } else {
+                            await uploadToDrive();
+                        }
+                    } catch (e) {
+                        console.error('Sync failed:', e);
+                        showToast('同期処理に失敗しました');
+                    } finally {
+                        isSyncing.value = false;
+                    }
+                }
+
+                async function uploadToDrive() {
+                    if (!accessToken.value) return;
+
+                    const payload = JSON.stringify({
+                        logs: logs.value,
+                        presets: presets.value,
+                        targetDailyHours: targetDailyHours.value,
+                        updatedAt: new Date().toISOString()
+                    });
+
+                    try {
+                        if (driveFileId.value) {
+                            await fetch(
+                                `https://www.googleapis.com/upload/drive/v3/files/${driveFileId.value}?uploadType=media`,
+                                {
+                                    method: 'PATCH',
+                                    headers: {
+                                        Authorization: `Bearer ${accessToken.value}`,
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: payload
+                                }
+                            );
+                        } else {
+                            const metadata = {
+                                name: SYNC_FILE_NAME,
+                                parents: ['appDataFolder']
+                            };
+                            const form = new FormData();
+                            form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+                            form.append('file', new Blob([payload], { type: 'application/json' }));
+
+                            const createRes = await fetch(
+                                'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+                                {
+                                    method: 'POST',
+                                    headers: { Authorization: `Bearer ${accessToken.value}` },
+                                    body: form
+                                }
+                            );
+                            const createdFile = await createRes.json();
+                            driveFileId.value = createdFile.id;
+                        }
+                        showToast('Driveへ同期・更新しました');
+                    } catch (e) {
+                        console.error('Upload failed:', e);
+                    }
+                }
+
+                function getRelativeDate(daysOffset) {
+                    const d = new Date();
+                    d.setDate(d.getDate() + daysOffset);
+                    return d.toISOString().split('T')[0];
+                }
+
+                const sortedLogs = computed(() => {
+                    return [...logs.value].sort((a, b) => new Date(b.date) - new Date(a.date));
+                });
+
+                const filteredLogs = computed(() => {
+                    if (!filterSubject.value) return sortedLogs.value;
+                    return sortedLogs.value.filter(l => l.subject === filterSubject.value);
+                });
+
+                const uniqueSubjects = computed(() => {
+                    const set = new Set(logs.value.map(l => l.subject));
+                    return Array.from(set);
+                });
+
+                const todayMinutes = computed(() => {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    return logs.value
+                        .filter(l => l.date === todayStr)
+                        .reduce((acc, cur) => acc + Number(cur.minutes), 0);
+                });
+
+                const thisWeekMinutes = computed(() => {
+                    const now = new Date();
+                    const sevenDaysAgo = new Date();
+                    sevenDaysAgo.setDate(now.getDate() - 6);
+                    sevenDaysAgo.setHours(0,0,0,0);
+
+                    return logs.value
+                        .filter(l => new Date(l.date) >= sevenDaysAgo)
+                        .reduce((acc, cur) => acc + Number(cur.minutes), 0);
+                });
+
+                const totalMinutes = computed(() => {
+                    return logs.value.reduce((acc, cur) => acc + Number(cur.minutes), 0);
+                });
+
+                const targetDailyMinutes = computed(() => Math.round((targetDailyHours.value || 0) * 60));
+                
+                const todayGoalPercent = computed(() => {
+                    if (targetDailyMinutes.value <= 0) return 0;
+                    return Math.round((todayMinutes.value / targetDailyMinutes.value) * 100);
+                });
+
+                const todayRemainingMinutes = computed(() => {
+                    return Math.max(0, targetDailyMinutes.value - todayMinutes.value);
+                });
+
+                const weeklyGoalPercent = computed(() => {
+                    const weeklyTarget = targetDailyMinutes.value * 7;
+                    if (weeklyTarget <= 0) return 0;
+                    return Math.round((thisWeekMinutes.value / weeklyTarget) * 100);
+                });
+
+                const sinceDateMinutes = computed(() => {
+                    if (!sinceDate.value) return 0;
+                    const start = new Date(sinceDate.value);
+                    start.setHours(0,0,0,0);
+
+                    return logs.value
+                        .filter(l => new Date(l.date) >= start)
+                        .reduce((acc, cur) => acc + Number(cur.minutes), 0);
+                });
+
+                const sinceDateDaysCount = computed(() => {
+                    if (!sinceDate.value) return 1;
+                    const start = new Date(sinceDate.value);
+                    const now = new Date();
+                    const diffTime = Math.abs(now - start);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    return Math.max(1, diffDays);
+                });
+
+                const sinceDateDailyAverage = computed(() => {
+                    return Math.round(sinceDateMinutes.value / sinceDateDaysCount.value);
+                });
+
+                const streakDays = computed(() => {
+                    if (logs.value.length === 0) return 0;
+                    const dateSet = new Set(logs.value.map(l => l.date));
+                    let streak = 0;
+                    let checkDate = new Date();
+
+                    let dateStr = checkDate.toISOString().split('T')[0];
+                    if (!dateSet.has(dateStr)) {
+                        checkDate.setDate(checkDate.getDate() - 1);
+                        dateStr = checkDate.toISOString().split('T')[0];
+                        if (!dateSet.has(dateStr)) return 0;
+                    }
+
+                    while (dateSet.has(dateStr)) {
+                        streak++;
+                        checkDate.setDate(checkDate.getDate() - 1);
+                        dateStr = checkDate.toISOString().split('T')[0];
+                    }
+                    return streak;
+                });
+
+                const maxStreakDays = computed(() => {
+                    if (logs.value.length === 0) return 0;
+                    const dates = Array.from(new Set(logs.value.map(l => l.date))).sort();
+                    let max = 0;
+                    let current = 0;
+                    let prevDate = null;
+
+                    dates.forEach(dStr => {
+                        const d = new Date(dStr);
+                        if (!prevDate) {
+                            current = 1;
+                        } else {
+                            const diffDays = Math.round((d - prevDate) / (1000 * 60 * 60 * 24));
+                            if (diffDays === 1) {
+                                current++;
+                            } else {
+                                current = 1;
+                            }
+                        }
+                        prevDate = d;
+                        if (current > max) max = current;
+                    });
+                    return max;
+                });
+
+                function formatMinutesToHours(min) {
+                    if (!min || min === 0) return '0分';
+                    const h = Math.floor(min / 60);
+                    const m = min % 60;
+                    if (h === 0) return `${m}分`;
+                    if (m === 0) return `${h}時間`;
+                    return `${h}時間${m}分`;
+                }
+
+                function formatDateShort(dateStr) {
+                    if (!dateStr) return { month: '', day: '' };
+                    const parts = dateStr.split('-');
+                    return { month: `${parseInt(parts[1])}月`, day: parts[2] };
+                }
+
+                function getSubjectColor(subjectName) {
+                    const found = presets.value.find(p => p.name === subjectName);
+                    if (found) return found.color;
+                    let hash = 0;
+                    for (let i = 0; i < subjectName.length; i++) hash = subjectName.charCodeAt(i) + ((hash << 5) - hash);
+                    const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+                    return '#' + '00000'.substring(0, 6 - c.length) + c;
+                }
+
+                function openAddModal() {
+                    isEditing.value = false;
+                    formLog.value = {
+                        id: null,
+                        date: new Date().toISOString().split('T')[0],
+                        subject: presets.value[0]?.name || '',
+                        category: '語学',
+                        minutes: 30,
+                        memo: ''
+                    };
+                    formHours.value = 0;
+                    formMinutes.value = 30;
+                    showLogModal.value = true;
+                    nextTick(() => lucide.createIcons());
+                }
+
+                function openEditModal(log) {
+                    isEditing.value = true;
+                    formLog.value = { ...log };
+                    formHours.value = Math.floor(log.minutes / 60);
+                    formMinutes.value = log.minutes % 60;
+                    showLogModal.value = true;
+                    nextTick(() => lucide.createIcons());
+                }
+
+                function quickAddLog(preset) {
+                    formLog.value = {
+                        id: Date.now().toString(),
+                        date: new Date().toISOString().split('T')[0],
+                        subject: preset.name,
+                        category: '学習',
+                        minutes: 30,
+                        memo: ''
+                    };
+                    logs.value.push({ ...formLog.value });
+                    saveData();
+                    showToast('記録を追加しました！');
+                }
+
+                function saveLog() {
+                    const totalMin = (formHours.value || 0) * 60 + (formMinutes.value || 0);
+                    if (totalMin <= 0) {
+                        showToast('学習時間を1分以上入力してください');
+                        return;
+                    }
+
+                    formLog.value.minutes = totalMin;
+
+                    if (isEditing.value) {
+                        const idx = logs.value.findIndex(l => l.id === formLog.value.id);
+                        if (idx !== -1) logs.value[idx] = { ...formLog.value };
+                        showToast('記録を更新しました');
+                    } else {
+                        formLog.value.id = Date.now().toString();
+                        logs.value.push({ ...formLog.value });
+                        showToast('記録を保存しました');
+                    }
+
+                    saveData();
+                    showLogModal.value = false;
+                }
+
+                function openConfirmDeleteModal(id) {
+                    targetDeleteId.value = id;
+                    showDeleteModal.value = true;
+                    nextTick(() => lucide.createIcons());
+                }
+
+                function confirmDeleteLog() {
+                    if (targetDeleteId.value) {
+                        logs.value = logs.value.filter(l => l.id !== targetDeleteId.value);
+                        saveData();
+                        showToast('記録を削除しました');
+                    }
+                    showDeleteModal.value = false;
+                    targetDeleteId.value = null;
+                }
+
+                function openConfirmClearModal() {
+                    showClearModal.value = true;
+                    nextTick(() => lucide.createIcons());
+                }
+
+                function confirmClearAll() {
+                    logs.value = [];
+                    presets.value = [];
+                    localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify([]));
+                    localStorage.setItem(STORAGE_KEY_PRESETS, JSON.stringify([]));
+                    localStorage.setItem(STORAGE_KEY_INIT, 'true');
+                    saveData();
+                    showClearModal.value = false;
+                    showToast('全データを消去しました');
+                }
+
+                const formattedTimerTime = computed(() => {
+                    const hrs = Math.floor(timerSeconds.value / 3600);
+                    const mins = Math.floor((timerSeconds.value % 3600) / 60);
+                    const secs = timerSeconds.value % 60;
+                    const p = (n) => String(n).padStart(2, '0');
+                    return hrs > 0 ? `${p(hrs)}:${p(mins)}:${p(secs)}` : `${p(mins)}:${p(secs)}`;
+                });
+
+                function toggleTimer() {
+                    if (timerActive.value) {
+                        clearInterval(timerInterval.value);
+                        timerActive.value = false;
+                    } else {
+                        timerActive.value = true;
+                        timerInterval.value = setInterval(() => {
+                            timerSeconds.value++;
+                        }, 1000);
+                    }
+                }
+
+                function resetTimer() {
+                    clearInterval(timerInterval.value);
+                    timerActive.value = false;
+                    timerSeconds.value = 0;
+                }
+
+                function saveTimerLog() {
+                    const mins = Math.floor(timerSeconds.value / 60);
+                    if (mins < 1) return;
+
+                    logs.value.push({
+                        id: Date.now().toString(),
+                        date: new Date().toISOString().split('T')[0],
+                        subject: timerSubject.value || 'タイマー学習',
+                        category: 'タイマー計測',
+                        minutes: mins,
+                        memo: `タイマーで${mins}分間計測`
+                    });
+
+                    resetTimer();
+                    saveData();
+                    showTimerModal.value = false;
+                    showToast('タイマー学習を記録しました！');
+                }
+
+                function addPreset() {
+                    if (!newPresetName.value.trim()) return;
+                    presets.value.push({
+                        id: Date.now().toString(),
+                        name: newPresetName.value.trim(),
+                        color: newPresetColor.value
+                    });
+                    newPresetName.value = '';
+                    savePresets();
+                }
+
+                function deletePreset(id) {
+                    presets.value = presets.value.filter(p => p.id !== id);
+                    savePresets();
+                }
+
+                function savePresets() {
+                    localStorage.setItem(STORAGE_KEY_PRESETS, JSON.stringify(presets.value));
+                    if (isSignedIn.value) uploadToDrive();
+                }
+
+                function saveTargetHours() {
+                    localStorage.setItem(STORAGE_KEY_TARGET, targetDailyHours.value.toString());
+                    if (isSignedIn.value) uploadToDrive();
+                    showToast('目標時間を更新しました');
+                }
+
+                function saveData(triggerDriveUpload = true) {
+                    localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs.value));
+                    localStorage.setItem(STORAGE_KEY_INIT, 'true');
+                    updateCharts();
+                    if (triggerDriveUpload && isSignedIn.value) {
+                        uploadToDrive();
+                    }
+                }
+
+                function initCharts() {
+                    const ctxDaily = document.getElementById('dailyChart');
+                    if (ctxDaily) {
+                        dailyChartInstance = new Chart(ctxDaily, {
+                            type: 'bar',
+                            data: getDailyChartData(),
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    y: { beginAtZero: true, grid: { color: 'rgba(150, 150, 150, 0.1)' } },
+                                    x: { grid: { display: false } }
+                                }
+                            }
+                        });
+                    }
+                }
+
+                function updateCharts() {
+                    if (dailyChartInstance) {
+                        dailyChartInstance.data = getDailyChartData();
+                        dailyChartInstance.update();
+                    }
+                }
+
+                function getDailyChartData() {
+                    const days = 14;
+                    const labels = [];
+                    const data = [];
+
+                    for (let i = days - 1; i >= 0; i--) {
+                        const d = new Date();
+                        d.setDate(d.getDate() - i);
+                        const dateStr = d.toISOString().split('T')[0];
+                        labels.push(`${d.getMonth()+1}/${d.getDate()}`);
+
+                        const sum = logs.value
+                            .filter(l => l.date === dateStr)
+                            .reduce((acc, cur) => acc + Number(cur.minutes), 0);
+                        data.push(sum);
+                    }
+
+                    return {
+                        labels,
+                        datasets: [{
+                            label: '学習時間 (分)',
+                            data,
+                            backgroundColor: '#6366f1',
+                            borderRadius: 6
+                        }]
+                    };
+                }
+
+                function exportData() {
+                    const dataStr = JSON.stringify({ logs: logs.value, presets: presets.value, targetDailyHours: targetDailyHours.value }, null, 2);
+                    const blob = new Blob([dataStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `studylog_backup_${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast('データをダウンロードしました');
+                }
+
+                function exportCSV() {
+                    if (logs.value.length === 0) {
+                        showToast('出力する学習記録がありません');
+                        return;
+                    }
+
+                    const headers = ['日付', '教材名', 'カテゴリ', '学習時間(分)', '学習時間', 'メモ'];
+                    const sorted = [...logs.value].sort((a, b) => new Date(a.date) - new Date(a.date));
+
+                    const rows = sorted.map(log => {
+                        const dateStr = log.date || '';
+                        const subject = `"${(log.subject || '').replace(/"/g, '""')}"`;
+                        const category = `"${(log.category || '').replace(/"/g, '""')}"`;
+                        const minutes = log.minutes || 0;
+                        const hoursFormatted = formatMinutesToHours(minutes);
+                        const hoursCol = `"${hoursFormatted.replace(/"/g, '""')}"`;
+                        const memo = `"${(log.memo || '').replace(/\r?\n/g, ' ').replace(/"/g, '""')}"`;
+
+                        return [dateStr, subject, category, minutes, hoursCol, memo].join(',');
+                    });
+
+                    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `studylog_${new Date().toISOString().split('T')[0]}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast('CSVを出力しました');
+                }
+
+                function importData(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const imported = JSON.parse(e.target.result);
+                            if (imported.logs) logs.value = imported.logs;
+                            if (imported.presets) presets.value = imported.presets;
+                            if (imported.targetDailyHours) targetDailyHours.value = imported.targetDailyHours;
+                            saveData();
+                            savePresets();
+                            saveTargetHours();
+                            showToast('データを復元しました');
+                        } catch (err) {
+                            showToast('ファイルの読み込みに失敗しました');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+
+                watch([logs, showLogModal, showTimerModal, showPresetModal, showDeleteModal, showClearModal, showConfigModal], () => {
+                    nextTick(() => lucide.createIcons());
+                }, { deep: true });
+
+                return {
+                    logs,
+                    presets,
+                    targetDailyHours,
+                    sinceDate,
+                    googleClientId,
+                    isSignedIn,
+                    isSyncing,
+                    toggleMenu,
+                    showLogModal,
+                    showTimerModal,
+                    showPresetModal,
+                    showDeleteModal,
+                    showClearModal,
+                    showConfigModal,
+                    toastMessage,
+                    isEditing,
+                    filterSubject,
+                    formLog,
+                    formHours,
+                    formMinutes,
+                    timerActive,
+                    timerSeconds,
+                    timerSubject,
+                    formattedTimerTime,
+                    newPresetName,
+                    newPresetColor,
+                    sortedLogs,
+                    filteredLogs,
+                    uniqueSubjects,
+                    todayMinutes,
+                    thisWeekMinutes,
+                    totalMinutes,
+                    todayGoalPercent,
+                    todayRemainingMinutes,
+                    weeklyGoalPercent,
+                    sinceDateMinutes,
+                    sinceDateDaysCount,
+                    sinceDateDailyAverage,
+                    streakDays,
+                    maxStreakDays,
+                    handleAuthClick,
+                    handleSignoutClick,
+                    saveApiConfig,
+                    syncWithDrive,
+                    formatMinutesToHours,
+                    formatDateShort,
+                    getSubjectColor,
+                    openAddModal,
+                    openEditModal,
+                    quickAddLog,
+                    saveLog,
+                    openConfirmDeleteModal,
+                    confirmDeleteLog,
+                    openConfirmClearModal,
+                    confirmClearAll,
+                    toggleTimer,
+                    resetTimer,
+                    saveTimerLog,
+                    addPreset,
+                    deletePreset,
+                    saveTargetHours,
+                    exportData,
+                    exportCSV,
+                    importData
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
