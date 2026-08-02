@@ -1187,11 +1187,11 @@
                         date: new Date().toISOString().split('T')[0],
                         subject: presets.value[0]?.name || '',
                         category: '語学',
-                        minutes: 30,
+                        minutes: '',
                         memo: ''
                     };
-                    formHours.value = 0;
-                    formMinutes.value = 30;
+                    formHours.value = '';
+                    formMinutes.value = '';
                     showLogModal.value = true;
                     nextTick(() => lucide.createIcons());
                 }
@@ -1211,7 +1211,7 @@
                         date: new Date().toISOString().split('T')[0],
                         subject: preset.name,
                         category: '学習',
-                        minutes: 30,
+                        minutes: '',
                         memo: ''
                     };
                     logs.value.push({ ...formLog.value });
