@@ -880,7 +880,7 @@
 
 　　　　　　　　　　　　　　　　　　　　　　// --- ここから追加 ---
           　　　　　　　　　　　　　　　　// 1ヶ月後の有効期限を計算して、localStorageに保存する
-                                     const expiresIn = response.expires_in || 2678400;
+                                     const expiresIn = response.expires_in || 26778400;
                                      const expirationTime = Date.now() + (expiresIn * 1000);
                                      localStorage.setItem('drive_access_token', response.access_token);
                                      localStorage.setItem('drive_token_expiration', expirationTime);
