@@ -930,11 +930,11 @@
                         return;
                     }
                     if (tokenClient.value) {
-                        tokenClient.value.requestAccessToken({ prompt: 'consent' });
+                        tokenClient.value.requestAccessToken({ prompt: '' });
                     } else {
                         initGoogleDrive();
                         setTimeout(() => {
-                            if (tokenClient.value) tokenClient.value.requestAccessToken({ prompt: 'consent' });
+                            if (tokenClient.value) tokenClient.value.requestAccessToken({ prompt: '' });
                         }, 500);
                     }
                 }
